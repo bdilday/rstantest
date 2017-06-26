@@ -1,5 +1,13 @@
 
 
+<<<<<<< HEAD
+generate_data_binom <- function(nlim = NULL, rseed=102) {
+  ev <- load_events_data(2007)
+  if (!is.null(nlim)) {
+    idx <- sample(1:nrow(ev), nlim)
+    ev <- ev[idx,]
+  }
+=======
 #' @import dplyr
 #' @import magrittr
 
@@ -13,6 +21,7 @@ get_events <- function() {
                  (ev$EVENT_CD >= 14 & ev$EVENT_CD <= 16))
 
   cc_po <- which(ev$EVENT_CD == 2)
+>>>>>>> f78300d0755813fdc27024202a172be3e0e6969d
   cc_hr <- which(ev$EVENT_CD == 23)
   cc_so <- which(ev$EVENT_CD == 3)
   cc_bb <- which( (ev$EVENT_CD >= 14) & (ev$EVENT_CD <= 16) )
@@ -69,6 +78,19 @@ generate_data_ravel <- function(ev=NULL, nlim = NULL, rseed=102) {
 #' @export
 generate_data_vector <- function(ev=NULL, nlim = NULL, rseed=102) {
 
+<<<<<<< HEAD
+update_ans_binom <- function(ans, mod) {
+
+  ans$theta <- matrix(rep(0, ans$D * 1), ncol=ans$D)
+  thetas <- sapply(mod@theta, max, 1e-6)
+  ans$theta[1,] <- thetas
+
+  ans
+}
+
+do_fit <- function(ans, warmup=100, iter=500, init=0, seed=10101) {
+  stan(file='data/multinom_ravel.stan',
+=======
    if (is.null(ev)) {
     ev <- get_events()
   }
@@ -95,6 +117,7 @@ generate_data_vector <- function(ev=NULL, nlim = NULL, rseed=102) {
 #' @export
 do_stan_fit_ravel <- function(ans, warmup=100, iter=500, init=0, seed=10101) {
   rstan::stan(file='inst/extdata/multinom_ravel.stan',
+>>>>>>> f78300d0755813fdc27024202a172be3e0e6969d
        data=ans,
        iter=iter,
        warmup=warmup,

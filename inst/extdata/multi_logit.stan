@@ -10,7 +10,7 @@ parameters {
 }
 model {
   matrix[N, K] gamma;
-  gamma <- x * beta';
+  gamma = x * beta';
 
   // prior
   to_vector(beta) ~ cauchy(0, 2.5);
