@@ -67,6 +67,7 @@ model {
     }
 
  for (n in 1:N) {
+//   print("lambda[n] ", n, " ", lambda[n]);
   y[n] ~ categorical_logit(lambda[n]);
  }
 

@@ -129,8 +129,9 @@ update_ans <- function(ans, mods) {
 
 get_init_fun <- function(ans) {
   rr <- ans$rr
+  k <- ans$K
   function(chain_id=NULL) {
-    list(ALPHAX=rr, C=rep(-1, ans$K))
+    list(ALPHAX=rr, C=rep(-1, k))
   }
 }
 
@@ -140,6 +141,7 @@ do_fit <- function(ans, warmup=100, iter=500, seed=10101) {
        data=ans,
        iter=iter,
        warmup=warmup,
+       #init="0",
        init=init_fun,
        seed=seed,
        cores=4, chains=4)
