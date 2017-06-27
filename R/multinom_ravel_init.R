@@ -142,5 +142,5 @@ do_fit <- function(ans, warmup=100, iter=500, seed=10101) {
        warmup=warmup,
        init=init_fun,
        seed=seed,
-       cores=1, chains=1)
+       cores=4, chains=4)
 }
