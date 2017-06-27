@@ -5,8 +5,28 @@ library(dplyr)
 library(magrittr)
 library(lme4)
 
-generate_event_data <- function(nlim = NULL, rseed=102) {
-  ev <- load_events_data(2016)
+generate_event_data <- function(nlim = NULL, rseed=102, year=2016) {
+  ev <- load_events_data(year)
+
+  # rm pitchers as hitters
+  ev %<>% filter(BAT_FLD_CD != 1)
+
+  # anyone with less than 20 PA hitting is generic
+  lowpa_batters <- ev %>% group_by(BAT_ID) %>% summarise(PA=n()) %>% filter(PA<=20) %$% BAT_ID
+
+  # anyone with less than 20 PA hitting is generic
+  lowpa_pitchers <- ev %>% group_by(PIT_ID) %>% summarise(PA=n()) %>% filter(PA<=20) %$% PIT_ID
+
+  if (length(lowpa_batters) > 0) {
+    cc <- which(ev$BAT_ID %in% lowpa_batters)
+    ev[cc,]$BAT_ID <- "xxxxb001"
+  }
+
+  if (length(lowpa_pitchers) > 0) {
+    cc <- which(ev$PIT_ID %in% lowpa_pitchers)
+    ev[cc,]$PIT_ID <- "xxxxp001"
+  }
+
   if (!is.null(nlim)) {
     idx <- sample(1:nrow(ev), nlim)
     ev <- ev[idx,]
@@ -20,11 +40,11 @@ generate_event_data <- function(nlim = NULL, rseed=102) {
 
   ev$outcome <- NA
 
-  ev[cc_bip0,]$outcome <- 0
-  ev[cc_bip1,]$outcome <- 1
-  ev[cc_hr,]$outcome <- 2
-  ev[cc_so,]$outcome <- 3
-  ev[cc_bb,]$outcome <- 4
+  ev[cc_bip0,]$outcome <- 1
+  ev[cc_bip1,]$outcome <- 2
+  ev[cc_hr,]$outcome <- 3
+  ev[cc_so,]$outcome <- 4
+  ev[cc_bb,]$outcome <- 5
 
   assertthat::are_equal(sum(is.na(ev$outcome)), 0)
   ev %<>% mutate(bid=as.integer(as.factor(BAT_ID)))
@@ -37,10 +57,15 @@ generate_event_data <- function(nlim = NULL, rseed=102) {
   ev
 }
 
-generate_model_df <- function(event_data) {
-  bat_ids <- unique(ev$BAT_ID)
-  pit_ids <- unique(ev$PIT_ID)
-  stad_ids <- unique(ev$HOME_TEAM_ID)
+generate_model_df <- function(event_data=NULL,
+                              nlim = NULL, rseed=102, year=2016) {
+  if (is.null(event_data)) {
+    event_data <- generate_event_data(nlim=nlim, rseed=rseed, year=year)
+  }
+
+  bat_ids <- unique(event_data$BAT_ID)
+  pit_ids <- unique(event_data$PIT_ID)
+  stad_ids <- unique(event_data$HOME_TEAM_ID)
 
   xx <- model.matrix(outcome ~ bid + pid + sid, data=event_data)[,-1]
   max_levels <- max(xx)
@@ -48,7 +73,7 @@ generate_model_df <- function(event_data) {
   sum_levels = sum(LEVELS)
   ans <- list(N=dim(xx)[[1]],
               D=dim(xx)[[2]],
-              K=length(unique(ev$outcome)),
+              K=length(unique(event_data$outcome)),
               LEVELS=LEVELS,
               x=xx,
               y=event_data$outcome,
@@ -80,26 +105,42 @@ mods
 
 }
 
-update_ans <- function(ev, mods, ans) {
+update_ans <- function(ans, mods) {
   nl <- length(names(mods))
 
-  ans$theta <- matrix(rep(0, ans$D * ans$K), ncol=ans$D)
+  ans$RANEF_SIGMA <- matrix(rep(0, ans$D * ans$K), ncol=ans$D)
   for (i in seq_along(names(mods))) {
     ichar <- names(mods)[[i]]
     mod <- mods[[ichar]]
     thetas <- sapply(mod@theta, max, 1e-6)
-    ans$theta[i,] <- thetas
+    ans$RANEF_SIGMA[i,] <- thetas
   }
 
+  rr <- matrix(rep(0, ans$K * ans$SUM_LEVELS), ncol=ans$SUM_LEVELS)
+  for (idx in seq_along(names(mods))) {
+    ichar <- names(mods)[[idx]]
+    mod <- mods[[ichar]]
+    tmp <- matrix(t(rbind(ranef(mod)$bid,ranef(mod)$pid,ranef(mod)$sid)), nrow=1)
+    rr[idx,] <- tmp
+  }
+  ans$rr <- rr
   ans
 }
 
-do_fit <- function(ans, warmup=100, iter=500, init=0, seed=10101) {
-  stan(file='data/multinom_ravel_init.stan',
+get_init_fun <- function(ans) {
+  rr <- ans$rr
+  function(chain_id=NULL) {
+    list(ALPHAX=rr, C=rep(-1, ans$K))
+  }
+}
+
+do_fit <- function(ans, warmup=100, iter=500, seed=10101) {
+  init_fun <- get_init_fun(ans)
+  stan(file='inst/extdata/multinom_ravel_init.stan',
        data=ans,
        iter=iter,
        warmup=warmup,
-       init=init,
+       init=init_fun,
        seed=seed,
-       cores=4)
+       cores=1, chains=1)
 }
