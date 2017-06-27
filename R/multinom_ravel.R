@@ -2,11 +2,19 @@
 
 #' @import dplyr
 #' @import magrittr
-
+#' @import caret
+#'
 #' @export
-get_events <- function() {
+get_events <- function(nlim = NULL, rseed=102) {
 
+  set.seed(rseed)
   ev <- BProDRA::load_events_data(2007)
+
+  if (!is.null(nlim)) {
+    nlim <- min(nlim, nrow(ev))
+    idx <- sample(1:nrow(ev), nlim)
+    ev <- ev[idx,]
+  }
 
   cc <- which( (ev$EVENT_CD <=3 ) |
                  (ev$EVENT_CD >= 20) |
@@ -40,10 +48,10 @@ get_events <- function() {
 }
 
 #' @export
-generate_data_ravel <- function(ev=NULL, nlim = NULL, rseed=102) {
-  if (is.null(ev)) {
-    ev <- get_events()
-  }
+generate_data_ravel <- function(nlim = NULL, rseed=102) {
+
+  set.seed(rseed)
+  ev <- get_events(nlim=nlim)
 
   if (!is.null(nlim)) {
     nlim <- min(nlim, nrow(ev))
@@ -53,7 +61,11 @@ generate_data_ravel <- function(ev=NULL, nlim = NULL, rseed=102) {
 
   xx <- model.matrix(outcome ~ bid + pid + sid, data=ev)[,-1]
   max_levels <- max(xx)
-  LEVELS <- c(length(bat_ids), length(pit_ids), length(stad_ids))
+  LEVELS <- c(length(unique(ev$bid)),
+              length(unique(ev$pid)),
+              length(unique(ev$sid))
+  )
+
   sum_levels = sum(LEVELS)
   ans <- list(N=dim(xx)[[1]],
               D=dim(xx)[[2]],
@@ -67,11 +79,10 @@ generate_data_ravel <- function(ev=NULL, nlim = NULL, rseed=102) {
 }
 
 #' @export
-generate_data_vector <- function(ev=NULL, nlim = NULL, rseed=102) {
+generate_data_vector <- function(nlim = NULL, rseed=102) {
 
-   if (is.null(ev)) {
-    ev <- get_events()
-  }
+  set.seed(rseed)
+  ev <- get_events()
 
   if (!is.null(nlim)) {
     nlim <- min(nlim, nrow(ev))
@@ -79,6 +90,7 @@ generate_data_vector <- function(ev=NULL, nlim = NULL, rseed=102) {
     ev <- ev[idx,]
   }
 
+  contr.ltfr <- caret::contr.ltfr
   dmy_v <- caret::dummyVars(outcome ~ BAT_ID + PIT_ID + HOME_TEAM_ID, data=ev)
   dummy_mat <- predict(dmy_v, newdata=ev)
   jj <- cbind(as.data.frame(dummy_mat), outcome=ev$outcome)
@@ -93,7 +105,7 @@ generate_data_vector <- function(ev=NULL, nlim = NULL, rseed=102) {
 }
 
 #' @export
-do_stan_fit_ravel <- function(ans, warmup=100, iter=500, init=0, seed=10101) {
+do_stan_fit_ravel <- function(ans, warmup=200, iter=1000, init=0, seed=10101) {
   rstan::stan(file='inst/extdata/multinom_ravel.stan',
        data=ans,
        iter=iter,
@@ -104,7 +116,7 @@ do_stan_fit_ravel <- function(ans, warmup=100, iter=500, init=0, seed=10101) {
 }
 
 #' @export
-do_stan_fit_vector <- function(ans, warmup=100, iter=500, init=0, seed=10101) {
+do_stan_fit_vector <- function(ans, warmup=200, iter=1000, init=0, seed=10101) {
   rstan::stan(file='inst/extdata/multinom_vector.stan',
               data=ans,
               iter=iter,
