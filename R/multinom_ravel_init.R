@@ -52,7 +52,7 @@ generate_event_data <- function(nlim = NULL, rseed=102, year=2016) {
   ev %<>% mutate(sid=as.integer(as.factor(HOME_TEAM_ID)))
   ev %<>% mutate(pid = pid+max(bid))
   ev %<>% mutate(sid = sid+max(pid))
-  ev %<>% select(GAME_ID, EVENT_ID, BAT_ID, PIT_ID, HOME_TEAM_ID, bid, pid, sid, outcome)
+  ev %<>% select(GAME_ID, EVENT_ID, EVENT_CD, BAT_ID, PIT_ID, HOME_TEAM_ID, bid, pid, sid, outcome)
 
   ev
 }
@@ -76,7 +76,7 @@ generate_model_df <- function(event_data=NULL,
               K=length(unique(event_data$outcome)),
               LEVELS=LEVELS,
               x=xx,
-              y=event_data$outcome,
+              y=as.integer(as.character(event_data$outcome)),
               MAX_LEVEL=max_levels,
               SUM_LEVELS=sum_levels,
               ev=event_data)
@@ -123,21 +123,43 @@ update_ans <- function(ans, mods) {
     tmp <- matrix(t(rbind(ranef(mod)$bid,ranef(mod)$pid,ranef(mod)$sid)), nrow=1)
     rr[idx,] <- tmp
   }
+  cc <- rr < 1e-2
+  rr[cc] <- 0.1
   ans$rr <- rr
   ans
 }
 
-get_init_fun <- function(ans) {
+get_init_fun <- function(ans, do_iden=FALSE) {
   rr <- ans$rr
   k <- ans$K
-  function(chain_id=NULL) {
-    list(ALPHAX=rr, C=rep(-1, k))
+
+  if (do_iden) {
+    function(chain_id=NULL) {
+      list(ALPHAX=rr[1:(k-1),], CX=rep(-1, k-1))
+    }
+  } else {
+    function(chain_id=NULL) {
+      list(ALPHAX=rr, CX=rep(-1, k))
+    }
   }
+
 }
 
-do_fit <- function(ans, warmup=100, iter=500, seed=10101) {
-  init_fun <- get_init_fun(ans)
+do_fit <- function(ans, warmup=100, iter=500, seed=10101, do_iden=FALSE) {
+  init_fun <- get_init_fun(ans, do_iden=do_iden)
+  if (do_iden) {
+    stan(file='inst/extdata/multinom_ravel_init_identify.stan',
+         model_name="multinom_iden",
+         data=ans,
+         iter=iter,
+         warmup=warmup,
+#         init="0",
+         init=init_fun,
+         seed=seed,
+         cores=4, chains=4)
+  } else {
   stan(file='inst/extdata/multinom_ravel_init.stan',
+       model_name="multinom_",
        data=ans,
        iter=iter,
        warmup=warmup,
@@ -145,4 +167,21 @@ do_fit <- function(ans, warmup=100, iter=500, seed=10101) {
        init=init_fun,
        seed=seed,
        cores=4, chains=4)
+  }
+}
+
+
+predict_from_stan <- function(stan_mod) {
+  ee <- rstan::extract(stan_mod)
+
+  alpha_m <- purrr::reduce(lapply(1:5, function(i) {ee$ALPHA[,i,] %>% colMeans()}), cbind)
+  c_m <- colMeans(ee$C)
+
+#  cm[166,] + cm[1061,] + cm[1230,] + colMeans(ee$C)
+
+  pp_mu <- t(t(alpha_m[ans$ev$bid,] + alpha_m[ans$ev$pid,] + alpha_m[ans$ev$sid,]) + c_m)
+
+  nl <- dim(pp_mu)[[1]]
+  ll <- lapply(1:nl, function(i) {exp(pp_mu[i,]) / (sum(exp(pp_mu[i,1:5])))})
+
 }

@@ -27,14 +27,27 @@ transformed data {
 }
 
 parameters {
-  real ALPHAX[K, SUM_LEVELS];
+  real ALPHAX[K-1, SUM_LEVELS];
   //
 //  real alpha[MAX_LEVEL, D];
-  real CX[K];
+  real CX[K-1];
 }
 
 transformed parameters {
+   real C[K];
+    real ALPHA[K, SUM_LEVELS];
+  //
+  for (k in 1:(K-1)) {
+    C[k] = CX[k];
+  }
+    C[K] = 0.0;
 
+  for (i in 1:SUM_LEVELS) {
+   for (k in 1:(K-1)) {
+       ALPHA[k, i] = ALPHAX[k, i];
+     }
+     ALPHA[K, i] = 0.0;
+   }
 
 }
 
@@ -42,37 +55,53 @@ model {
   vector[K] lambda[N];
 
   for (k in 1:K) {
-    CX[k] ~ normal(0, 10);
+    C[k] ~ normal(0, 10);
   }
+
+  // for (i in 1:SUM_LEVELS) {
+  //   for (k in 1:K) {
+  //     ALPHA[k, i] ~ normal(0, 2);
+  //   }
+  // }
 
   for (i in 1:SUM_LEVELS) {
     for (k in 1:K) {
       for (d in 1:D) {
         if (i >= CU_LEVELS[1,d] && i <= CU_LEVELS[2,d]) {
 //            print("alpha norm ", i, k, d, RANEF_SIGMA[k, d]);
-            ALPHAX[k, i] ~ normal(0, RANEF_SIGMA[k, d]);
+            ALPHA[k, i] ~ normal(0, RANEF_SIGMA[k, d]);
           }
       }
     }
   }
 
-  for (n in 1:N) {
-    for (k in 1:K) {
-      lambda[n][k] = CX[k];
-      for (d in 1:D) {
-        lambda[n][k] = lambda[n][k] + ALPHAX[k, x[n][d]  ];
-      // print("lambda "
-      // , n, " "
-      // , k, " "
-      // , d, " "
-      // , lambda[n][k], " "
-      // )
-      }
-    }
-    }
+  // for (n in 1:N) {
+  //   for (k in 1:K) {
+  //     lambda[n][k] = C[k];
+  //   }
+  //   if (n == N) {
+  // //  print("n k ", n, " ", K, " ", CX, " ", C, " ", lambda[n]," ");
+  // }
+  // }
+
+   for (n in 1:N) {
+     for (k in 1:K) {
+       lambda[n][k] = C[k];
+       for (d in 1:D) {
+         lambda[n][k] = lambda[n][k] + ALPHA[k, x[n][d]  ];
+  //     print("lambda "
+  //     , n, " "
+  //     , k, " "
+  //     , d, " "
+  //     , lambda[n][k], " "
+  //     )
+       }
+     }
+     }
 
  for (n in 1:N) {
 //   print("lambda[n] ", n, " ", lambda[n]);
+//  y[n] ~ categorical_logit(lambda[n]);
   y[n] ~ categorical_logit(lambda[n]);
  }
 
